@@ -7,19 +7,19 @@ Our guiding principles are: **minimalism**, **developer ergonomics**, and **prod
 
 ## 🎯 Guiding Principles
 
-1. **Keep the Core Austere**
-   Cardinal should remain small: `Request`, `Reply`, `Session`, `Engine`.
-   Everything else (stores, transports, middlewares) must be pluggable.
+1. **Keep the Core Austere** ✅
+   Cardinal remains small: `Request`, `Reply`, `Session`, `Engine`.
+   Everything else (stores, transports, middlewares) is pluggable.
 
-2. **USSD-Native Semantics**
-   Use terms natural to USSD developers: `SHOW`, `INPUT`, `Redirect`, `Menu`.
-   Avoid leaking HTTP jargon or aggregator quirks into the developer API.
+2. **USSD-Native Semantics** ✅
+   Terms natural to USSD developers: `SHOW`, `INPUT`, `Redirect`, `Menu`.
+   No HTTP jargon or aggregator leaks.
 
-3. **Predictability & Testability**
-   Deterministic flows, consistent menu conventions, and built-in simulation for BDD tests.
+3. **Predictability & Testability** ✅
+   Deterministic flows, consistent menu conventions, built-in testkit for BDD.
 
-4. **Practical Production Needs**
-   Timeouts, retries, idempotency, observability — built with real telco environments in mind.
+4. **Practical Production Needs** 🔄
+   Timeouts, retries, idempotency, observability — partly delivered, expanding.
 
 ---
 
@@ -27,22 +27,32 @@ Our guiding principles are: **minimalism**, **developer ergonomics**, and **prod
 
 * **Redis Store**
   Production-grade session persistence with TTL, cluster support, and Lua-based atomic ops.
+  ⏳ *Planned*
 
-* **Middleware Chain**
-  HTTP-like `Use(...)` to attach logging, rate-limit, and metrics around flows.
+* **Middleware Chain** ✅
+  HTTP-like `Use(...)` for logging, recovery, rate-limit, and metrics.
+
+* **Per-Route Middleware** ✅
+  `SHOWWith(...)` and `INPUTWith(...)` for route-specific concerns.
+
+* **Router Groups** ✅
+  Prefix-based grouping with shared middlewares, supporting nesting.
 
 * **Pagination Helper**
-  A tiny abstraction for “8) Prev / 9) Next” in long menus.
+  Abstraction for “8) Prev / 9) Next” in long menus.
+  ⏳ *Planned*
 
 * **Improved Testkit**
 
-    * DSL for scripted flows: `Flow("Buy Airtime").Step("home").Send("2").Expect("Enter amount")`.
-    * Snapshot diffing for expected screens.
+    * DSL for scripted flows
+    * Snapshot diffing
+      ⏳ *Planned*
 
 * **Examples Expansion**
 
-    * Banking mini-flow (balance, mini-statement, transfer).
-    * Airtime/data bundle catalog with confirmation.
+    * Banking mini-flow
+    * Airtime/data bundle catalog
+    * **Cardinal Wallet (balances, transfers, history)** ✅
 
 ---
 
@@ -50,54 +60,44 @@ Our guiding principles are: **minimalism**, **developer ergonomics**, and **prod
 
 * **CLI Tooling (`cardinal`)**
 
-    * `cardinal new app` → scaffold project layout.
-    * `cardinal gen menu` → generate boilerplate for menu flows.
+    * `cardinal new app`
+    * `cardinal gen menu`
+      ⏳ *Planned*
 
 * **Documentation Site**
-
-    * Tutorials: *basic app*, *param routes*, *session persistence*, *testing*.
-    * Visual flow diagrams (drawn from route definitions).
+  Tutorials and visual flow diagrams.
+  ⏳ *Planned*
 
 * **Aggregator Adapters**
-  Out-of-the-box handlers for popular USSD aggregators (Africa’s Talking, Infobip, MTN, Vodacom), normalizing vendor quirks.
+  Built-ins for Africa’s Talking, Infobip, MTN, Vodacom.
+  ⏳ *Planned*
 
 * **Observability**
 
-    * Structured logs `{sid, msisdn, path, latency_ms}`.
-    * Optional Prometheus metrics (requests, active sessions, errors).
+    * Structured logs `{sid, msisdn, path, latency_ms}`
+    * Prometheus metrics middleware
+      ⏳ *Planned*
 
 * **i18n / Multi-language Support**
-  Light abstraction to translate menu strings.
+  ⏳ *Planned*
 
 ---
 
 ## 🌍 Long-Term (v1.x)
 
-* **Pluggable Encoders**
-  GSM-7, UCS-2, and auto-splitting for multi-part messages.
-
-* **Form Helper**
-  Multi-field capture within a flow, with built-in validation and retries.
-
-* **Enterprise Hardening**
-
-    * Idempotent side-effects with outbox pattern.
-    * Graceful handling of duplicate aggregator retries.
-    * Security features: IP whitelisting, optional HMAC signatures.
-
-* **Flow Introspection API**
-  Ability to query routes and menu structures at runtime (for documentation and monitoring).
-
-* **Community Ecosystem**
-  Encourage external stores (Mongo, Postgres), middlewares (auth, A/B testing), and examples.
+* **Pluggable Encoders** (GSM-7, UCS-2, multipart) ⏳
+* **Form Helper** (multi-field capture, validation, retries) ⏳
+* **Enterprise Hardening** (idempotent side-effects, retry safety, HMAC) ⏳
+* **Flow Introspection API** ⏳
+* **Community Ecosystem** (external stores, middlewares, examples) 🔄 already emerging with Wallet and emulator.
 
 ---
 
 ## 🛣 Release Cadence
 
-* **Patch releases** (`v0.x.y`) every \~2 weeks (bug fixes, minor enhancements).
-* **Minor releases** (`v0.y.0`) every \~2–3 months (new modules, features).
-* **v1.0.0** once Redis, middleware, pagination, and docs are stable and tested in production.
+* **Patch releases** (`v0.x.y`) every \~2 weeks.
+* **Minor releases** (`v0.y.0`) every \~2–3 months.
+* **v1.0.0** once Redis, pagination, observability, and docs are hardened in production.
 
 ---
 
@@ -105,14 +105,14 @@ Our guiding principles are: **minimalism**, **developer ergonomics**, and **prod
 
 Cardinal is **MIT-licensed** and open to contributions.
 
-* **Core decisions**: guided by simplicity and production viability.
-* **Pull requests**: must include tests and docs.
-* **Discussions**: roadmap proposals tracked in GitHub Issues.
+* Core decisions guided by simplicity and production viability.
+* Pull requests must include tests and docs.
+* Roadmap proposals tracked in GitHub Issues.
 
 ---
 
 ## 📜 Closing Note
 
 Cardinal is not just a library; it’s a **developer compass** for USSD.
-Its role is to **abstract complexity**, **enforce clarity**, and **ensure testability** — while staying out of your way when you need full control.
+It abstracts complexity, enforces clarity, and ensures testability — while staying out of your way when you need full control.
 
