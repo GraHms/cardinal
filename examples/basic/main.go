@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/grahms/cardinal/core"
+	"github.com/grahms/cardinal/emulator"
 	"github.com/grahms/cardinal/menu"
 	"github.com/grahms/cardinal/middleware"
 	"github.com/grahms/cardinal/router"
@@ -47,16 +48,12 @@ func main() {
 				Back("/home").
 				Prompt(c)
 		},
-		middleware.HMAC("super-secret"),
-		middleware.TightRouteLimit(),
 	)
 
 	r.INPUTWith("/balance",
 		func(c *router.Ctx) core.Reply {
 			return menu.New("/balance").Back("/home").Handle(c)
 		},
-		middleware.HMAC("super-secret"),
-		middleware.TightRouteLimit(),
 	)
 
 	st := store.NewInMemoryStore(60 * time.Second)
@@ -64,6 +61,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/ussd", transport.HTTPHandler(eng))
+	emulator.Attach(mux, eng)
 	log.Println("Cardinal with middleware on :8080")
 	_ = http.ListenAndServe(":8080", mux)
 }
