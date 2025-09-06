@@ -12,6 +12,16 @@ import (
 	"github.com/grahms/cardinal/router"
 )
 
+func Audit(tag string) router.Middleware {
+	return func(next router.Handler) router.Handler {
+		return func(c *router.Ctx) core.Reply {
+			log.Printf("AUDIT tag=%s sid=%s msisdn=%s path=%s input=%q",
+				tag, c.Session.ID(), c.Req.Msisdn, c.Path(), c.In())
+			return next(c)
+		}
+	}
+}
+
 // Recover: guards against panics and returns a safe END message.
 func Recover() router.Middleware {
 	return func(next router.Handler) router.Handler {
