@@ -18,8 +18,8 @@ type Ctx struct {
 }
 
 func (c *Ctx) Path() string             { return c.path }
-func (c *Ctx) In() string               { return c.in } // user input for this step (last token)
-func (c *Ctx) Redirect(p string)        { c.next = p }  // set next screen path
+func (c *Ctx) In() string               { return c.in }
+func (c *Ctx) Redirect(p string)        { c.next = p }
 func (c *Ctx) Next() string             { return c.next }
 func (c *Ctx) Set(k string, v any)      { c.Session.Set(k, v) }
 func (c *Ctx) Get(k string) (any, bool) { return c.Session.Get(k) }
@@ -27,8 +27,10 @@ func (c *Ctx) Param(k string) string    { return c.params[k] }
 
 type Handler func(*Ctx) core.Reply
 
+type Middleware func(Handler) Handler
+
 type route struct {
-	pattern string // e.g. "/confirm/data/:id"
+	pattern string
 	show    Handler
 	input   Handler
 }
@@ -37,16 +39,23 @@ type Router struct {
 	start string
 	exact map[string]route
 	param []route
+
+	mws []Middleware
 }
 
 func New(start string) *Router {
 	return &Router{start: start, exact: map[string]route{}, param: []route{}}
 }
 
+func (rt *Router) Use(mw ...Middleware) { rt.mws = append(rt.mws, mw...) }
+
 func (rt *Router) SHOW(path string, h Handler)  { rt.add(path, h, true) }
 func (rt *Router) INPUT(path string, h Handler) { rt.add(path, h, false) }
 
 func (rt *Router) add(path string, h Handler, isShow bool) {
+	// wrap the handler with middlewares (outermost is first in Use list)
+	h = wrap(h, rt.mws)
+
 	if strings.Contains(path, ":") {
 		for i := range rt.param {
 			if rt.param[i].pattern == path {
@@ -67,6 +76,7 @@ func (rt *Router) add(path string, h Handler, isShow bool) {
 		rt.param = append(rt.param, r)
 		return
 	}
+
 	r := rt.exact[path]
 	r.pattern = path
 	if isShow {
@@ -98,13 +108,11 @@ func (a *app) Handle(ctx context.Context, s *core.Session, req core.Request) (co
 	if !reply.Continue {
 		return reply, nil
 	}
-
 	if next := mustString(s, "_next"); next != "" {
 		s.Set("_p", next)
 		s.Set("_next", "")
 		return a.execSHOW(ctx, s, req, next), nil
 	}
-
 	return a.execSHOW(ctx, s, req, path), nil
 }
 
@@ -116,7 +124,6 @@ func (a *app) execSHOW(ctx context.Context, s *core.Session, req core.Request, p
 	cc := &Ctx{Context: ctx, Session: s, Req: req, path: path, params: params}
 	return h(cc)
 }
-
 func (a *app) execINPUT(ctx context.Context, s *core.Session, req core.Request, path, in string) core.Reply {
 	h, params := a.match(path, false)
 	if h == nil {
@@ -146,6 +153,14 @@ func (a *app) match(path string, wantSHOW bool) (Handler, map[string]string) {
 		}
 	}
 	return nil, nil
+}
+
+func wrap(h Handler, mws []Middleware) Handler {
+	// apply in reverse so first Use is outermost (Use(A,B) => A(B(h)))
+	for i := len(mws) - 1; i >= 0; i-- {
+		h = mws[i](h)
+	}
+	return h
 }
 
 func matchParams(path, pattern string) (map[string]string, bool) {
@@ -180,7 +195,6 @@ func splitClean(s string) []string {
 	}
 	return strings.Split(s, "/")
 }
-
 func mustString(s *core.Session, k string) string {
 	if v, ok := s.Get(k); ok {
 		if x, ok := v.(string); ok {
@@ -189,7 +203,6 @@ func mustString(s *core.Session, k string) string {
 	}
 	return ""
 }
-
 func lastToken(t string) string {
 	t = strings.TrimSpace(t)
 	if t == "" {
