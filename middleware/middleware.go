@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"sync"
 	"time"
@@ -41,6 +44,28 @@ func Logging(l *log.Logger) router.Middleware {
 			return rep
 		}
 	}
+}
+
+// Simple HMAC signature check (illustrative)
+func HMAC(secret string) router.Middleware {
+	return func(next router.Handler) router.Handler {
+		return func(c *router.Ctx) core.Reply {
+			sig := c.Req.Meta["sig"] // or read from headers via transport adapter
+			mac := hmac.New(sha256.New, []byte(secret))
+			mac.Write([]byte(c.Session.ID() + c.Req.Msisdn + c.Req.Text))
+			want := hex.EncodeToString(mac.Sum(nil))
+			if sig != want {
+				return core.END("Unauthorized.")
+			}
+			return next(c)
+		}
+	}
+}
+
+// Tight rate limit (per route) e.g., 2 requests / 3 seconds
+func TightRouteLimit() router.Middleware {
+	lim := RateLimitPerMSISDN(2, 3*time.Second)
+	return lim
 }
 
 // RateLimitPerMSISDN: simple token-bucket per phone number.

@@ -53,38 +53,8 @@ func (rt *Router) SHOW(path string, h Handler)  { rt.add(path, h, true) }
 func (rt *Router) INPUT(path string, h Handler) { rt.add(path, h, false) }
 
 func (rt *Router) add(path string, h Handler, isShow bool) {
-	// wrap the handler with middlewares (outermost is first in Use list)
-	h = wrap(h, rt.mws)
-
-	if strings.Contains(path, ":") {
-		for i := range rt.param {
-			if rt.param[i].pattern == path {
-				if isShow {
-					rt.param[i].show = h
-				} else {
-					rt.param[i].input = h
-				}
-				return
-			}
-		}
-		r := route{pattern: path}
-		if isShow {
-			r.show = h
-		} else {
-			r.input = h
-		}
-		rt.param = append(rt.param, r)
-		return
-	}
-
-	r := rt.exact[path]
-	r.pattern = path
-	if isShow {
-		r.show = h
-	} else {
-		r.input = h
-	}
-	rt.exact[path] = r
+	h = wrap(h, rt.mws) // only globals
+	rt.addCore(path, h, isShow)
 }
 
 func (rt *Router) Mount() core.App { return &app{rt: rt} }
@@ -114,6 +84,53 @@ func (a *app) Handle(ctx context.Context, s *core.Session, req core.Request) (co
 		return a.execSHOW(ctx, s, req, next), nil
 	}
 	return a.execSHOW(ctx, s, req, path), nil
+}
+
+// SHOWWith/INPUTWith attach per-route middleware (after globals).
+func (rt *Router) SHOWWith(path string, h Handler, mw ...Middleware) {
+	rt.addWith(path, h, true, mw...)
+}
+func (rt *Router) INPUTWith(path string, h Handler, mw ...Middleware) {
+	rt.addWith(path, h, false, mw...)
+}
+
+func (rt *Router) addWith(path string, h Handler, isShow bool, mw ...Middleware) {
+	// global first, then per-route (outermost first via wrap)
+	full := append([]Middleware{}, rt.mws...) // copy
+	full = append(full, mw...)                // route-level
+	h = wrap(h, full)
+	rt.addCore(path, h, isShow)
+}
+
+func (rt *Router) addCore(path string, h Handler, isShow bool) {
+	if strings.Contains(path, ":") {
+		for i := range rt.param {
+			if rt.param[i].pattern == path {
+				if isShow {
+					rt.param[i].show = h
+				} else {
+					rt.param[i].input = h
+				}
+				return
+			}
+		}
+		r := route{pattern: path}
+		if isShow {
+			r.show = h
+		} else {
+			r.input = h
+		}
+		rt.param = append(rt.param, r)
+		return
+	}
+	r := rt.exact[path]
+	r.pattern = path
+	if isShow {
+		r.show = h
+	} else {
+		r.input = h
+	}
+	rt.exact[path] = r
 }
 
 func (a *app) execSHOW(ctx context.Context, s *core.Session, req core.Request, path string) core.Reply {
