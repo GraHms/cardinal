@@ -52,13 +52,213 @@ go get github.com/grahms/cardinal
 
 ---
 
+
+
 ## 📋 Step-by-Step Examples
 
-We’ll build a simple airtime app, from **basic menu** to **parameters**.
-
-(… keep your existing *Examples 1–4* sections here unchanged …)
+Let’s build a simple **airtime app** in stages, from a static menu to a parameterized confirmation flow.
+Each example shows **code** and the **actual USSD output** (`CON` to continue, `END` to terminate).
 
 ---
+```mermaid
+flowchart TD
+    A[Start Session] --> B[Home Menu]
+    B -->|1| C[Balance Screen]
+    B -->|2| D[Enter Amount]
+    D --> E[Confirm Screen]
+    E -->|1: Yes| F[END: Top-up successful]
+    E -->|0: Back| B
+
+```
+
+### 1. Hello World Menu
+
+**Code**
+
+```go
+r := router.New("/home")
+
+r.SHOW("/home", func(c *router.Ctx) core.Reply {
+    return menu.New("/home").
+        Title("Welcome").
+        Opt("Check Balance", "/balance").
+        Opt("Buy Airtime", "/amount").
+        Exit("Goodbye").
+        Prompt(c)
+})
+r.INPUT("/home", func(c *router.Ctx) core.Reply {
+    return menu.New("/home").
+        Opt("Check Balance", "/balance").
+        Opt("Buy Airtime", "/amount").
+        Exit("Goodbye").
+        Handle(c)
+})
+```
+
+**User Flow**
+
+```
+CON Welcome
+1) Check Balance
+2) Buy Airtime
+00) Goodbye
+```
+
+---
+
+### 2. Balance Screen
+
+**Code**
+
+```go
+r.SHOW("/balance", func(c *router.Ctx) core.Reply {
+    return menu.New("/balance").
+        Title("Balance: 123.45 MZN").
+        Back("/home").
+        Prompt(c)
+})
+r.INPUT("/balance", func(c *router.Ctx) core.Reply {
+    return menu.New("/balance").Back("/home").Handle(c)
+})
+```
+
+**User Flow**
+
+```
+CON Balance: 123.45 MZN
+0) Back
+```
+
+---
+
+### 3. Capturing Free-Form Input
+
+**Code**
+
+```go
+r.SHOW("/amount", func(c *router.Ctx) core.Reply {
+    return core.CON("Enter amount (MZN):")
+})
+r.INPUT("/amount", func(c *router.Ctx) core.Reply {
+    in := c.In()
+    if !digits(in) {
+        return core.CON("Invalid amount. Try again:")
+    }
+    c.Set("amount", atoi(in))
+    c.Redirect("/confirm/airtime")
+    return core.CON("")
+})
+```
+
+**User Flow**
+
+```
+CON Enter amount (MZN):
+```
+
+If user types `abc`:
+
+```
+CON Invalid amount. Try again:
+```
+
+---
+
+### 4. Confirmation Screen
+
+**Code**
+
+```go
+r.SHOW("/confirm/airtime", func(c *router.Ctx) core.Reply {
+    amt, _ := c.Get("amount")
+    return menu.New("/confirm/airtime").
+        Title(fmt.Sprintf("Confirm %v MZN?", amt)).
+        End("Yes", "Top-up successful.").
+        Back("/home").
+        Prompt(c)
+})
+r.INPUT("/confirm/airtime", func(c *router.Ctx) core.Reply {
+    return menu.New("/confirm/airtime").
+        End("Yes", "Top-up successful.").
+        Back("/home").
+        Handle(c)
+})
+```
+
+**User Flow**
+
+```
+CON Confirm 100 MZN?
+1) Yes
+0) Back
+```
+
+If user selects `1`:
+
+```
+END Top-up successful.
+```
+
+---
+
+### 5. Parameterized Sub-Paths
+
+**Code**
+
+```go
+r.SHOW("/products/data", func(c *router.Ctx) core.Reply {
+    return menu.New("/products/data").
+        Title("Data Bundles").
+        Opt("1GB / 100 MZN", "/confirm/data/1").
+        Opt("2GB / 180 MZN", "/confirm/data/2").
+        Back("/home").
+        Prompt(c)
+})
+r.INPUT("/products/data", func(c *router.Ctx) core.Reply {
+    return menu.New("/products/data").
+        Opt("1GB / 100 MZN", "/confirm/data/1").
+        Opt("2GB / 180 MZN", "/confirm/data/2").
+        Back("/home").
+        Handle(c)
+})
+
+r.SHOW("/confirm/data/:id", func(c *router.Ctx) core.Reply {
+    return menu.New("/confirm/data/:id").
+        Title("Confirm bundle " + c.Param("id") + "?").
+        End("Yes", "Purchase complete").
+        Back("/products/data").
+        Prompt(c)
+})
+```
+
+**User Flow**
+
+```
+CON Data Bundles
+1) 1GB / 100 MZN
+2) 2GB / 180 MZN
+0) Back
+```
+
+Choosing `2`:
+
+```
+CON Confirm bundle 2?
+1) Yes
+0) Back
+```
+
+Then `1`:
+
+```
+END Purchase complete
+```
+
+---
+
+📌 With just a few primitives (`SHOW`, `INPUT`, `Menu`, `Redirect`), you can model **complete telco flows** that are predictable, testable, and production-ready.
+
+
 
 ## 🔗 Middleware
 
@@ -127,29 +327,182 @@ You’ll see a phone-like screen to test sessions interactively.
 
 ---
 
+
+
 ## 🧪 Testing with Simulator
 
-(keep your existing testkit example)
+Building USSD flows without a way to **simulate conversations** is fragile.
+Cardinal ships with a **test kit** (`testkit.Simulator`) that allows you to model an entire session step by step, in a style similar to BDD.
+
+### Example: Airtime Top-Up Flow
+
+```go
+import (
+    "testing"
+
+    "github.com/grahms/cardinal/core"
+    "github.com/grahms/cardinal/router"
+    "github.com/grahms/cardinal/menu"
+    "github.com/grahms/cardinal/store"
+    "github.com/grahms/cardinal/testkit"
+    "time"
+)
+
+func BuildEngineForTests() *core.Engine {
+    r := router.New("/home")
+    r.SHOW("/home", func(c *router.Ctx) core.Reply {
+        return menu.New("/home").
+            Title("Welcome").
+            Opt("Buy Airtime", "/amount").
+            Exit("Goodbye").
+            Prompt(c)
+    })
+    r.INPUT("/home", func(c *router.Ctx) core.Reply {
+        return menu.New("/home").
+            Opt("Buy Airtime", "/amount").
+            Exit("Goodbye").
+            Handle(c)
+    })
+    r.SHOW("/amount", func(c *router.Ctx) core.Reply {
+        return core.CON("Enter amount (MZN):")
+    })
+    r.INPUT("/amount", func(c *router.Ctx) core.Reply {
+        if c.In() != "100" {
+            return core.CON("Invalid. Try again:")
+        }
+        return core.END("Top-up successful.")
+    })
+
+    return core.New(r.Mount(), core.Config{Store: store.NewInMemoryStore(30 * time.Second)})
+}
+
+func TestTopupFlow(t *testing.T) {
+    eng := BuildEngineForTests()
+    sim := testkit.New(t, eng).Start("+258840000001")
+
+    sim.Expect("Welcome").
+        Send("1").         // Select Buy Airtime
+        Expect("Enter amount").
+        Send("100").       // Enter valid amount
+        ExpectEndsWith("Top-up successful.")
+}
+```
+
+### How It Works
+
+* **`Start(msisdn)`** → begins a fresh simulated session for that phone number.
+* **`Expect("...")`** → asserts that the current screen contains text.
+* **`Send("...")`** → sends a user input as if typed on the phone.
+* **`ExpectEndsWith("...")`** → ensures the reply ends the session with the expected text.
+
+### Why It Matters
+
+* Deterministic → catch regressions before deploying to a telco.
+* Fast → no need for an aggregator sandbox during unit tests.
+* Expressive → write your flows like scripts, easy for QA and devs alike.
+
 
 ---
 
-## 🗂 Package Structure
+
+## 🌍 Transport Channels (Aggregator Adapters)
+
+Cardinal keeps its **core engine vendor-agnostic**, but telco aggregators each speak a different dialect.
+Adapters in `transport/` normalize inbound requests to `core.Request` and format outbound replies as the aggregator expects.
 
 ```
-cardinal/
- ├─ core/        # Engine, Session, Request, Reply
- ├─ router/      # SHOW/INPUT router, params, groups
- ├─ menu/        # Menu builder
- ├─ store/       # InMemory, Redis (planned)
- ├─ middleware/  # Recover, Logging, RateLimit, etc.
- ├─ transport/   # HTTP adapter for aggregator callbacks
- ├─ testkit/     # Simulator for BDD tests
- ├─ emulator/    # Web-based emulator
- ├─ examples/    # Example flows (wallet, airtime, etc.)
- └─ go.mod
+[ Aggregator ] ⇄ [ Adapter ] ⇄ [ Engine ] ⇄ [ Router/Middleware/Menu ]
+```
+
+### Built-in Adapters
+
+| Vendor / Adapter      | Inbound format                                                           | Outbound format                           | Endpoint (example) |
+| --------------------- | ------------------------------------------------------------------------ | ----------------------------------------- | ------------------ |
+| **Generic (default)** | form: `sessionId`, `phoneNumber`, `text`                                 | `CON ...` / `END ...` (plain text)        | `/ussd`            |
+| **Africa’s Talking**  | form: `sessionId`, `phoneNumber`, `text`                                 | `CON ...` / `END ...` (plain text)        | `/ussd/at`         |
+| **Vodacom (JSON)**    | JSON: `{sessionId, msisdn, userInput}`                                   | JSON: `{type:"Response", text:"CON ..."}` | `/ussd/voda`       |
+| **Infobip (form)**    | form: `SESSION_ID`, `MSISDN`, `USSD_STRING` (fallbacks: `INPUT`, `text`) | `CON ...` / `END ...` (plain text)        | `/ussd/infobip`    |
+| **Generic JSON**      | Configurable inbound/outbound keys                                       | Configurable JSON                         | `/ussd/json`       |
+
+### Example Wiring
+
+```go
+mux := http.NewServeMux()
+
+// Engine
+eng := core.New(routes, core.Config{Store: store.NewInMemoryStore(60*time.Second)})
+
+// Generic default (form)
+mux.Handle("/ussd", transport.HTTPHandler(eng))
+
+// Africa’s Talking (form)
+mux.Handle("/ussd/at", transport.AfricaTalkingHandler(eng))
+
+// Vodacom (JSON)
+mux.Handle("/ussd/voda", transport.VodacomHandler(eng))
+
+// Infobip (form)
+mux.Handle("/ussd/infobip", transport.InfobipFormHandler(eng))
+
+// Generic JSON (custom keys)
+mux.Handle("/ussd/json", transport.JSONGenericHandler(
+    eng,
+    transport.JSONMap{InSessionID: "sid", InMsisdn: "from", InText: "input"},
+    transport.JSONMap{OutTextKey: "message", OutWrapperKey: "type", OutWrapperVal: "Response"},
+))
+```
+
+### curl Examples
+
+**Africa’s Talking**
+
+```bash
+curl -X POST http://localhost:8080/ussd/at \
+  -d 'sessionId=AT123' \
+  -d 'phoneNumber=+258840000001' \
+  -d 'text=1'
+```
+
+**Vodacom JSON**
+
+```bash
+curl -X POST http://localhost:8080/ussd/voda \
+  -H 'Content-Type: application/json' \
+  -d '{"sessionId":"VDC-123","msisdn":"+258840000001","userInput":"1"}'
+```
+
+**Infobip (form)**
+
+```bash
+curl -X POST http://localhost:8080/ussd/infobip \
+  -d 'SESSION_ID=IB-987' \
+  -d 'MSISDN=+258840000001' \
+  -d 'USSD_STRING=00'
 ```
 
 ---
+
+⚠️ **Note:** field names sometimes vary across tenants or regions.
+All adapters accept override options (`ATFields`, `VodaFields`, `IBFields`, `JSONMap`) so you can adapt without touching the engine.
+
+```mermaid
+sequenceDiagram
+    participant User as Mobile User
+    participant Agg as Aggregator (AT / Vodacom / Infobip)
+    participant Adp as Cardinal Adapter
+    participant Eng as Cardinal Engine
+    participant App as Your Handlers
+
+    User->>Agg: Dial *111#
+    Agg->>Adp: POST (sessionId, msisdn, text)
+    Adp->>Eng: core.Request
+    Eng->>App: Route → Menu / Logic
+    App-->>Eng: core.Reply
+    Eng-->>Adp: Reply{Continue, Message}
+    Adp-->>Agg: "CON ..." / "END ..." (vendor format)
+    Agg-->>User: Menu text on phone
+
+```
 
 ## 📜 Design Philosophy
 
