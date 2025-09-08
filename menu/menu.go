@@ -10,11 +10,13 @@ import (
 
 // Builder composes newline-based option menus with Back/Exit semantics.
 type Builder struct {
-	path   string
-	title  string
-	items  []Item
-	backTo string
-	exitTx string
+	path      string
+	title     string
+	items     []Item
+	backTo    string
+	exitTx    string
+	backLabel string
+	exitLabel string
 }
 
 type Item struct {
@@ -24,7 +26,7 @@ type Item struct {
 	EndText string                  // if set, ends session with this text
 }
 
-func New(path string) *Builder             { return &Builder{path: path} }
+func New(path string) *Builder             { return &Builder{path: path, backLabel: "Back", exitLabel: "Exit"} }
 func (b *Builder) Title(s string) *Builder { b.title = s; return b }
 func (b *Builder) Opt(label, target string, hooks ...func(*router.Ctx) error) *Builder {
 	it := Item{Label: label, Target: target}
@@ -40,6 +42,18 @@ func (b *Builder) End(label, endText string) *Builder {
 }
 func (b *Builder) Back(target string) *Builder { b.backTo = target; return b }
 func (b *Builder) Exit(text string) *Builder   { b.exitTx = text; return b }
+func (b *Builder) WithBackLabel(s string) *Builder {
+	if s != "" {
+		b.backLabel = s
+	}
+	return b
+}
+func (b *Builder) WithExitLabel(s string) *Builder {
+	if s != "" {
+		b.exitLabel = s
+	}
+	return b
+}
 
 // Prompt returns a CON reply with the built screen.
 func (b *Builder) Prompt(c *router.Ctx) core.Reply {
@@ -51,11 +65,12 @@ func (b *Builder) Prompt(c *router.Ctx) core.Reply {
 		lines = append(lines, fmt.Sprintf("%d) %s", i+1, it.Label))
 	}
 	if b.backTo != "" {
-		lines = append(lines, "0) Voltar")
+		lines = append(lines, "0) "+b.backLabel)
 	}
 	if b.exitTx != "" {
-		lines = append(lines, "00) Sair")
+		lines = append(lines, "00) "+b.exitLabel)
 	}
+
 	return core.CON(strings.Join(lines, "\n"))
 }
 

@@ -260,6 +260,96 @@ END Purchase complete
 
 
 
+## 📑 Paginated Menus (Large Lists)
+
+When your service offers **long catalogs** (data bundles, products, agents), it’s best to split them into pages.
+Cardinal provides a **Paginator** helper to add `Prev`/`Next` options automatically.
+
+### Example: Bundles Catalog
+
+```go
+bundles := []string{
+    "Daily 100MB / 10 MZN",
+    "Daily 500MB / 20 MZN",
+    "Daily 1GB / 30 MZN",
+    "Weekly 1GB / 50 MZN",
+    "Weekly 2GB / 90 MZN",
+    "Weekly 5GB / 200 MZN",
+    "Monthly 1GB / 100 MZN",
+    "Monthly 5GB / 400 MZN",
+    "Monthly 10GB / 700 MZN",
+    "Night 1GB / 15 MZN",
+    "Night 3GB / 40 MZN",
+    "Night 10GB / 100 MZN",
+}
+
+// Create paginator: 5 items per page
+p := menu.NewPaginator("/bundles", bundles, 5).
+    WithTitle("Pacotes de Dados").
+    WithNavLabels("Anterior", "Seguinte").
+    WithBack("/home")
+
+// Paginated list routes
+r.SHOW("/bundles/:page", func(c *router.Ctx) core.Reply {
+    page, _ := strconv.Atoi(c.Param("page"))
+    return p.Render(page).Prompt(c)
+})
+r.INPUT("/bundles/:page", func(c *router.Ctx) core.Reply {
+    page, _ := strconv.Atoi(c.Param("page"))
+    return p.Render(page).Handle(c)
+})
+
+// Confirm selected bundle
+r.SHOW("/bundles/item/:idx", func(c *router.Ctx) core.Reply {
+    idx, _ := strconv.Atoi(c.Param("idx"))
+    chosen := bundles[idx]
+    return menu.New("/bundles/item/:idx").
+        Title("Confirmar\n" + chosen + "?").
+        End("Sim", "Compra concluída.").
+        Back("/bundles/1").
+        Prompt(c)
+})
+```
+
+### User Flow
+
+**Page 1**
+
+```
+CON Pacotes de Dados
+1) Daily 100MB / 10 MZN
+2) Daily 500MB / 20 MZN
+3) Daily 1GB / 30 MZN
+4) Weekly 1GB / 50 MZN
+5) Weekly 2GB / 90 MZN
+6) Seguinte
+0) Voltar
+```
+
+**Page 2**
+
+```
+CON Pacotes de Dados
+1) Weekly 5GB / 200 MZN
+2) Monthly 1GB / 100 MZN
+3) Monthly 5GB / 400 MZN
+4) Monthly 10GB / 700 MZN
+5) Night 1GB / 15 MZN
+6) Anterior
+7) Seguinte
+0) Voltar
+```
+
+**Confirmation**
+
+```
+CON Confirmar
+Weekly 5GB / 200 MZN?
+1) Sim
+0) Voltar
+```
+
+
 ## 🔗 Middleware
 
 Middleware wraps handlers — like `net/http` but USSD-native.
